@@ -1,0 +1,75 @@
+#!/bin/bash
+
+function pre_deploy_hook() {
+  source scripts/hooks/pre-deploy.sh
+}
+
+function post_deploy_hook() {
+  source scripts/hooks/post-deploy.sh
+}
+
+function create_latest_build_directory() {
+
+  print_info "Creating build directory"
+  CURRENT_BUILD_DIRECTORY=$DEPLOYER_DIRECTORY/$APP_ID/releases/$BUILD_NUMBER
+  if [ ! -d $CURRENT_BUILD_DIRECTORY ]
+  then
+    mkdir $CURRENT_BUILD_DIRECTORY
+  fi
+
+  print_success "Build directory created"
+
+  print_info "Building application"
+  get_latest_build_directory_contents
+  print_success "Application built!"
+}
+
+function get_latest_build_directory_contents() {
+  source scripts/hooks/pre-get-build-contents.sh
+  source scripts/build.sh
+  source scripts/hooks/post-get-build-contents.sh
+}
+
+function deploy() {
+  print_title "\tPreparing for deployment"
+
+  CURRENT_BUILD_DIRECTORY=$DEPLOYER_DIRECTORY/$APP_ID/releases/$BUILD_NUMBER
+  LATEST_BUILD_DIRECTORY=$DEPLOYER_DIRECTORY/$APP_ID/latest
+
+  create_latest_build_directory
+  
+  pre_deploy_hook
+  
+  print_title "\tDeploying"
+  if [ -d $LATEST_BUILD_DIRECTORY ]
+  then
+    rm -rf $LATEST_BUILD_DIRECTORY
+  fi
+  ln -sf $CURRENT_BUILD_DIRECTORY $LATEST_BUILD_DIRECTORY
+  post_deploy_hook
+
+  print_success "Deployment completed"
+}
+
+
+function main() {
+
+  if [[ -z "$DEPLOYER_DIRECTORY" || -z "$APP_ID" || -z "$BUILD_NUMBER" ]]
+  then
+    if [ -f .env ]
+    then
+      source .env
+    else
+      print_error "Project variables not found. Please create a .env file in the root of your project."
+      exit 1
+    fi
+  fi
+  source scripts/helpers.sh
+  source scripts/startup.sh
+  deploy
+  print_title "\tCleaning up"
+  source scripts/cleanup.sh
+  print_success "Cleanup completed!"
+}
+
+main
